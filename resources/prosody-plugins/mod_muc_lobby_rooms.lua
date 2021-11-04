@@ -104,7 +104,7 @@ function notify_lobby_access(room, actor, jid, display_name, granted)
     broadcast_json_msg(room, actor, notify_json);
 end
 
-function filter_stanza(stanza)
+function filter_stanza(stanza, session)
     if not stanza.attr or not stanza.attr.from or not main_muc_service then
         return stanza;
     end
@@ -118,8 +118,24 @@ function filter_stanza(stanza)
             end
 
             -- check is an owner, only owners can receive the presence
-            local room = main_muc_service.get_room_from_jid(jid_bare(node .. '@' .. main_muc_component_config));
-            if not room or room.get_affiliation(room, stanza.attr.to) == 'owner' then
+            local main_room_jid = jid_bare(node .. '@' .. main_muc_component_config);
+            local room = main_muc_service.get_room_from_jid(main_room_jid);
+
+            if not room then
+                module:log('warn', 'No main room found %s', main_room_jid);
+                return stanza;
+            end
+
+            if room.get_affiliation(room, stanza.attr.to) == 'owner' then
+                -- filter presences from moderator to moderator
+                for _, occupant in room:each_occupant() do
+                    for jid in occupant:each_session() do
+                        if jid == session.full_jid then
+                            return nil;
+                        end
+                    end
+                end
+
                 return stanza;
             end
 
